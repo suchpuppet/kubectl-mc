@@ -40,7 +40,7 @@ ARCHITECTURE:
    g. Format output to match standard kubectl format
 
 TECHNICAL REQUIREMENTS:
-- Language: Go 1.21+ (idiomatic Go patterns expected)
+- Language: Go 1.23+ (idiomatic Go patterns expected)
 - Kubernetes Client: client-go library
 - sig-multicluster: Use ONLY standard sig-multicluster APIs (vendor-neutral)
   - ClusterProfile API, About API, or Cluster Inventory API (TBD during implementation)

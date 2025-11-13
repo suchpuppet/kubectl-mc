@@ -4,7 +4,7 @@ This guide helps you get started with kubectl-mc in your local OCM environment.
 
 ## Prerequisites
 
-- Go 1.21+
+- Go 1.23+
 - OCM hub cluster with ClusterProfile feature gate enabled
 - Registered spoke clusters
 - kubectl configured with contexts for hub and spoke clusters

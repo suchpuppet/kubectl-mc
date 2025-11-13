@@ -253,7 +253,7 @@ kubectl mc delete deployment nginx --all-clusters
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.23+
 - kubectl installed
 - Access to a Kubernetes cluster with sig-multicluster APIs
 
