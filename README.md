@@ -82,14 +82,52 @@ This proof-of-concept is intended for:
 - [ ] `kubectl mc edit <resource>` - Multiplexed edit across clusters (with safety checks)
 - [ ] Wildcard cluster filtering (`--clusters=prod-*`)
 
-### Phase 2: Configuration Management (Planned)
-- [ ] Platform-specific credential helpers:
-  - [ ] `kubectl mc setup --provider aws` - AWS EKS integration
-  - [ ] `kubectl mc setup --provider gcp` - Google GKE integration
-  - [ ] `kubectl mc setup --provider azure` - Azure AKS integration
-  - [ ] `kubectl mc setup --provider ali` - Alibaba ACK integration
-- [ ] Context validation and credential checking
-- [ ] Advanced cluster filtering (labels, selectors)
+### Phase 2: Automatic Credential Configuration (Planned)
+
+**Goal**: Eliminate manual mapping file by using ClusterProfile properties to dynamically construct exec plugin configurations.
+
+- [ ] **ClusterProfile Properties Integration**:
+  - [ ] Read `auth.exec.*` properties from ClusterProfile resources
+  - [ ] Dynamically construct exec plugin configurations on-the-fly
+  - [ ] Support for AWS EKS (`aws eks get-token`)
+  - [ ] Support for GCP GKE (`gke-gcloud-auth-plugin`)
+  - [ ] Support for Azure AKS (`kubelogin`)
+  - [ ] Generic exec plugin property parsing
+
+- [ ] **OCM Addon for ClusterProfile Enrichment**:
+  - [ ] Addon watches ManagedCluster resources
+  - [ ] Automatically populates ClusterProfile properties based on cluster type
+  - [ ] Detects cloud provider from ManagedCluster labels/annotations
+  - [ ] Generates exec plugin metadata for each cluster
+
+- [ ] **User Credentials Model**:
+  - [ ] Exec plugins use user's local cloud CLI credentials
+  - [ ] No secrets storage required
+  - [ ] Leverages existing `aws configure`, `gcloud auth login`, `az login`
+  - [ ] Fallback to Phase 1 manual mapping if properties not present
+
+**Example ClusterProfile with Properties**:
+```yaml
+status:
+  accessProviders:
+  - name: kubeconfig
+    cluster:
+      server: https://ABC123.eks.amazonaws.com
+      certificate-authority-data: LS0t...
+  properties:
+  - name: auth.exec.command
+    value: "aws"
+  - name: auth.exec.args
+    value: "eks,get-token,--cluster-name,production,--region,us-east-1"
+  - name: auth.exec.apiVersion
+    value: "client.authentication.k8s.io/v1beta1"
+  - name: cloud.provider
+    value: "aws"
+  - name: cluster.type
+    value: "eks"
+```
+
+See [docs/architecture.md](docs/architecture.md#phase-2-automatic-credential-configuration) for detailed design.
 
 ### Phase 3: Write Operations (With Safety Mechanisms)
 - [ ] Write operations with safety mechanisms:

@@ -190,6 +190,142 @@ Cache invalidation triggers:
 - Explicit refresh (`kubectl mc --refresh`)
 - Setup command execution
 
+## Phase 2: Automatic Credential Configuration
+
+Phase 2 will eliminate the manual mapping file by leveraging ClusterProfile properties to dynamically construct exec plugin configurations for cloud-native clusters.
+
+### ClusterProfile Properties for Auth
+
+ClusterProfile resources can store exec plugin metadata in their `status.properties` field:
+
+```yaml
+apiVersion: multicluster.x-k8s.io/v1alpha1
+kind: ClusterProfile
+metadata:
+  name: prod-eks-cluster
+status:
+  accessProviders:
+  - name: kubeconfig
+    cluster:
+      server: https://ABC123.eks.amazonaws.com
+      certificate-authority-data: LS0t...
+  properties:
+  - name: auth.exec.command
+    value: "aws"
+  - name: auth.exec.args
+    value: "eks,get-token,--cluster-name,production,--region,us-east-1"
+  - name: auth.exec.apiVersion
+    value: "client.authentication.k8s.io/v1beta1"
+  - name: cloud.provider
+    value: "aws"
+  - name: cluster.type
+    value: "eks"
+```
+
+### Dynamic Exec Plugin Construction
+
+kubectl-mc reads these properties and constructs the exec configuration on-the-fly:
+
+```go
+func buildRestConfig(clusterProfile ClusterProfile) (*rest.Config, error) {
+    // Get connection info from accessProviders
+    accessProvider := clusterProfile.Status.AccessProviders[0]
+    
+    config := &rest.Config{
+        Host: accessProvider.Cluster.Server,
+        TLSClientConfig: rest.TLSClientConfig{
+            CAData: accessProvider.Cluster.CertificateAuthorityData,
+        },
+    }
+    
+    // Check for exec plugin properties
+    execCommand := getProperty(clusterProfile.Status.Properties, "auth.exec.command")
+    if execCommand != "" {
+        config.ExecProvider = &api.ExecConfig{
+            APIVersion: getProperty(clusterProfile.Status.Properties, "auth.exec.apiVersion"),
+            Command:    execCommand,
+            Args:       strings.Split(getProperty(clusterProfile.Status.Properties, "auth.exec.args"), ","),
+        }
+    }
+    
+    return config, nil
+}
+```
+
+### User Credentials Model
+
+**Key Principle**: The exec plugin runs locally and uses the **user's own cloud credentials**.
+
+For AWS EKS:
+```bash
+# User has configured AWS CLI
+aws configure
+# or using SSO
+aws sso login --profile production
+
+# kubectl-mc executes: aws eks get-token --cluster-name production
+# This uses the user's ~/.aws/credentials or SSO session
+```
+
+For GKE:
+```bash
+# User authenticated to gcloud
+gcloud auth login
+
+# kubectl-mc executes: gke-gcloud-auth-plugin
+# Uses user's gcloud credentials
+```
+
+**No secrets stored** - credentials come from the user's local environment.
+
+### OCM Addon for ClusterProfile Enrichment
+
+An OCM addon can automatically populate these properties:
+
+```go
+// Addon watches ManagedCluster resources
+func enrichClusterProfile(managedCluster ManagedCluster) {
+    clusterProfile := getClusterProfile(managedCluster.Name)
+    
+    // Detect cluster type from labels or annotations
+    if managedCluster.Labels["vendor"] == "EKS" {
+        clusterProfile.Status.Properties = append(
+            clusterProfile.Status.Properties,
+            Property{Name: "auth.exec.command", Value: "aws"},
+            Property{Name: "auth.exec.args", 
+                Value: fmt.Sprintf("eks,get-token,--cluster-name,%s,--region,%s",
+                    managedCluster.Labels["cluster-name"],
+                    managedCluster.Labels["region"])},
+            Property{Name: "auth.exec.apiVersion", Value: "client.authentication.k8s.io/v1beta1"},
+            Property{Name: "cloud.provider", Value: "aws"},
+            Property{Name: "cluster.type", Value: "eks"},
+        )
+    } else if managedCluster.Labels["vendor"] == "GKE" {
+        // Similar logic for GKE
+    }
+    
+    updateClusterProfile(clusterProfile)
+}
+```
+
+### Supported Cloud Providers
+
+| Provider | Command | User Credentials Required |
+|----------|---------|---------------------------|
+| AWS EKS | `aws eks get-token` | AWS CLI configured (`aws configure` or IAM role) |
+| GCP GKE | `gke-gcloud-auth-plugin` | gcloud authenticated (`gcloud auth login`) |
+| Azure AKS | `kubelogin` | Azure CLI logged in (`az login`) |
+| OCM | Native integration | Hub cluster credentials |
+
+### Fallback to Manual Mapping
+
+If ClusterProfile doesn't contain exec plugin properties, kubectl-mc falls back to the Phase 1 manual mapping file approach.
+
+This ensures backward compatibility and supports:
+- Non-cloud clusters (on-prem, edge)
+- Clusters with custom authentication
+- Environments without OCM addons
+
 ## Execution Model
 
 ### Parallel Execution
