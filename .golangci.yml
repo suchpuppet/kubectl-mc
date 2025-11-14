@@ -1,7 +1,7 @@
 # golangci-lint configuration for kubectl-mc
-# NOTE: IDE may show schema warnings - these can be safely ignored.
-# This is a valid golangci-lint v1.x configuration file.
 # See: https://golangci-lint.run/usage/configuration/
+
+version: "2"
 
 run:
   timeout: 5m
