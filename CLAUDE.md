@@ -20,6 +20,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Community Validation**: Discussed with sig-multicluster leadership. There is interest in hosting this plugin in the sig-multicluster GitHub organization. The sig has focused on API development and recognizes the value of standardized user experience tooling.
 
+**Phase 2 Design**: Automatic credential configuration using ClusterProfile properties to store exec plugin metadata. This eliminates the manual mapping file while preserving the user credentials model (exec plugins run locally using user's own AWS/GCP/Azure CLI credentials).
+
 ## Core Architecture
 
 ### Hub-and-Spoke Model
@@ -327,21 +329,107 @@ Requirements:
 - Cluster filtering to limit blast radius
 - Progressive rollout capabilities for large-scale changes
 
+## Phase 2: Automatic Credential Configuration
+
+Phase 2 will eliminate the manual mapping file by using ClusterProfile properties for exec plugin configuration.
+
+### Key Design Principles
+
+1. **User Credentials Model**: Exec plugins run locally using the user's own cloud CLI credentials (not stored secrets)
+2. **ClusterProfile Properties**: Store exec plugin **metadata** in `status.properties`, not credentials
+3. **No Hardcoded Logic**: kubectl-mc reads properties generically - OCM addon provides cloud-specific metadata
+4. **Fallback Compatibility**: If properties not present, fall back to Phase 1 manual mapping
+
+### ClusterProfile Properties Schema
+
+```yaml
+status:
+  accessProviders:  # Connection info
+  - name: kubeconfig
+    cluster:
+      server: https://ABC123.eks.amazonaws.com
+      certificate-authority-data: LS0t...
+  properties:      # Exec plugin metadata
+  - name: auth.exec.command
+    value: "aws"
+  - name: auth.exec.args
+    value: "eks,get-token,--cluster-name,production,--region,us-east-1"
+  - name: auth.exec.apiVersion
+    value: "client.authentication.k8s.io/v1beta1"
+  - name: cloud.provider
+    value: "aws"
+  - name: cluster.type
+    value: "eks"
+```
+
+### Implementation Approach
+
+```go
+// Generic exec plugin construction from properties
+func buildExecConfig(props []Property) *api.ExecConfig {
+    command := getProperty(props, "auth.exec.command")
+    if command == "" {
+        return nil  // No exec auth, fallback to mapping file
+    }
+    
+    return &api.ExecConfig{
+        APIVersion: getProperty(props, "auth.exec.apiVersion"),
+        Command:    command,
+        Args:       strings.Split(getProperty(props, "auth.exec.args"), ","),
+        Env:        parseEnv(getProperty(props, "auth.exec.env")),
+    }
+}
+```
+
+### Why Properties, Not Secrets?
+
+The KEP-4322 suggests using Secrets for kubeconfig data, but this doesn't work for user-credential-based exec plugins:
+
+- **Problem**: Secrets assume static credentials (tokens/certs), not dynamic user credentials
+- **Solution**: Properties store exec plugin **metadata** (command + args), not credentials
+- **Benefit**: Same ClusterProfile works for all users - exec plugin uses their own local cloud credentials
+
+### OCM Addon Responsibility
+
+An OCM addon watches ManagedCluster resources and enriches ClusterProfile with properties:
+
+```go
+// Addon detects cluster type and populates properties
+if managedCluster.Labels["vendor"] == "EKS" {
+    clusterProfile.Status.Properties = []Property{
+        {Name: "auth.exec.command", Value: "aws"},
+        {Name: "auth.exec.args", 
+         Value: "eks,get-token,--cluster-name," + clusterName + ",--region," + region},
+        {Name: "auth.exec.apiVersion", Value: "client.authentication.k8s.io/v1beta1"},
+    }
+}
+```
+
+### Supported Cloud Providers
+
+- **AWS EKS**: `aws eks get-token` (requires `aws configure` or IAM role)
+- **GCP GKE**: `gke-gcloud-auth-plugin` (requires `gcloud auth login`)
+- **Azure AKS**: `kubelogin` (requires `az login`)
+
+kubectl-mc remains cloud-agnostic - it just reads properties generically.
+
 ## Development Considerations
 
 When implementing:
 1. **Vendor neutrality is non-negotiable** - use only sig-multicluster standard APIs
-2. Start with read-only operations (get, describe, logs) before write operations
-3. Implement robust error handling for partial cluster failures (show partial results)
-4. Consider cluster health/reachability before operations
-5. Log verbosely for troubleshooting multi-cluster issues
-6. Always verify sig-multicluster API compatibility
-7. Think about scale (10s to 100s of clusters)
-8. Maintain backward compatibility with kubectl patterns
-9. Follow standard Go project layout and kubectl plugin naming conventions
-10. Design for mixed environments (different cloud providers, on-prem, various auth methods)
-11. OCM users should benefit, but OCM must not be required
-12. Consider credential security (never log or expose sensitive tokens)
+2. **User credentials always** - exec plugins use user's local cloud CLI credentials, never stored secrets
+3. Start with read-only operations (get, describe, logs) before write operations
+4. Implement robust error handling for partial cluster failures (show partial results)
+5. Consider cluster health/reachability before operations
+6. Log verbosely for troubleshooting multi-cluster issues
+7. Always verify sig-multicluster API compatibility
+8. Think about scale (10s to 100s of clusters)
+9. Maintain backward compatibility with kubectl patterns
+10. Follow standard Go project layout and kubectl plugin naming conventions
+11. Design for mixed environments (different cloud providers, on-prem, various auth methods)
+12. OCM users should benefit, but OCM must not be required
+13. Consider credential security (never log or expose sensitive tokens)
+14. **Phase 2**: Read exec plugin metadata from ClusterProfile properties generically, no hardcoded cloud logic
 
 ## Resources
 
