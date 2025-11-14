@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	testNginxOutput    = "Name:         nginx\nNamespace:    default\nLabels:       app=nginx\n"
-	testUnexpectedErr  = "unexpected error: %v"
+	testNginxOutput   = "Name:         nginx\nNamespace:    default\nLabels:       app=nginx\n"
+	testUnexpectedErr = "unexpected error: %v"
 )
 
 func TestDescribeAggregator(t *testing.T) {

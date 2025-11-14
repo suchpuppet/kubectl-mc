@@ -182,7 +182,7 @@ func (e *Executor) getFromCluster(ctx context.Context, cluster discovery.Cluster
 
 	// Check if name contains wildcards
 	hasWildcard := name != "" && (strings.Contains(name, "*") || strings.Contains(name, "?") || strings.Contains(name, "["))
-	
+
 	if name != "" && !hasWildcard {
 		// Get specific resource by exact name
 		item, err := resourceInterface.Get(ctx, name, metav1.GetOptions{})
@@ -198,7 +198,7 @@ func (e *Executor) getFromCluster(ctx context.Context, cluster discovery.Cluster
 			result.Error = fmt.Errorf("failed to list resources: %w", err)
 			return result
 		}
-		
+
 		// If wildcard pattern specified, filter results
 		if hasWildcard {
 			for _, item := range list.Items {
@@ -276,23 +276,23 @@ func (e *Executor) describeFromCluster(ctx context.Context, cluster discovery.Cl
 // executeKubectlDescribe shells out to kubectl describe for perfect formatting
 func (e *Executor) executeKubectlDescribe(ctx context.Context, contextName, resource, name, namespace string) (string, error) {
 	args := []string{"describe", resource}
-	
+
 	if name != "" {
 		args = append(args, name)
 	}
-	
+
 	if namespace != "" {
 		args = append(args, "-n", namespace)
 	}
-	
+
 	args = append(args, "--context", contextName)
-	
+
 	// Execute kubectl
 	cmd := exec.CommandContext(ctx, "kubectl", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("kubectl describe failed: %w, output: %s", err, string(output))
 	}
-	
+
 	return string(output), nil
 }

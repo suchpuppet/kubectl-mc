@@ -126,7 +126,7 @@ func (a *TableAggregator) AggregateGetResults(results *executor.AggregatedResult
 func (a *TableAggregator) formatPods(items []ItemWithCluster) error {
 	// Calculate column widths dynamically
 	widths := a.calculatePodColumnWidths(items)
-	
+
 	// Header
 	fmt.Fprintf(a.writer, "%-*s %-*s %-*s %-*s %-*s %-*s %s\n",
 		widths.namespace, "NAMESPACE",
@@ -192,12 +192,12 @@ func (a *TableAggregator) calculatePodColumnWidths(items []ItemWithCluster) podC
 		status:    len("STATUS"),
 		restarts:  len("RESTARTS"),
 	}
-	
+
 	for _, item := range items {
 		ns, _, _ := unstructured.NestedString(item.Item.Object, "metadata", "namespace")
 		name, _, _ := unstructured.NestedString(item.Item.Object, "metadata", "name")
 		phase, _, _ := unstructured.NestedString(item.Item.Object, "status", "phase")
-		
+
 		if len(ns) > widths.namespace {
 			widths.namespace = len(ns)
 		}
@@ -207,7 +207,7 @@ func (a *TableAggregator) calculatePodColumnWidths(items []ItemWithCluster) podC
 		if len(item.Cluster) > widths.cluster {
 			widths.cluster = len(item.Cluster)
 		}
-		
+
 		// Ready format is "X/Y"
 		if containerStatuses, found, _ := unstructured.NestedSlice(item.Item.Object, "status", "containerStatuses"); found {
 			total := len(containerStatuses)
@@ -226,12 +226,12 @@ func (a *TableAggregator) calculatePodColumnWidths(items []ItemWithCluster) podC
 				widths.ready = len(readyStr)
 			}
 		}
-		
+
 		if len(phase) > widths.status {
 			widths.status = len(phase)
 		}
 	}
-	
+
 	// Add padding
 	widths.namespace += 2
 	widths.name += 2
@@ -239,7 +239,7 @@ func (a *TableAggregator) calculatePodColumnWidths(items []ItemWithCluster) podC
 	widths.ready += 2
 	widths.status += 2
 	widths.restarts += 2
-	
+
 	return widths
 }
 
@@ -247,7 +247,7 @@ func (a *TableAggregator) calculatePodColumnWidths(items []ItemWithCluster) podC
 func (a *TableAggregator) formatDeployments(items []ItemWithCluster) error {
 	// Calculate column widths dynamically
 	widths := a.calculateDeploymentColumnWidths(items)
-	
+
 	// Header
 	fmt.Fprintf(a.writer, "%-*s %-*s %-*s %-*s %-*s %-*s %s\n",
 		widths.namespace, "NAMESPACE",
@@ -295,13 +295,13 @@ func (a *TableAggregator) calculateDeploymentColumnWidths(items []ItemWithCluste
 		upToDate:  len("UP-TO-DATE"),
 		available: len("AVAILABLE"),
 	}
-	
+
 	for _, item := range items {
 		ns, _, _ := unstructured.NestedString(item.Item.Object, "metadata", "namespace")
 		name, _, _ := unstructured.NestedString(item.Item.Object, "metadata", "name")
 		replicas, _, _ := unstructured.NestedInt64(item.Item.Object, "status", "replicas")
 		readyReplicas, _, _ := unstructured.NestedInt64(item.Item.Object, "status", "readyReplicas")
-		
+
 		if len(ns) > widths.namespace {
 			widths.namespace = len(ns)
 		}
@@ -311,13 +311,13 @@ func (a *TableAggregator) calculateDeploymentColumnWidths(items []ItemWithCluste
 		if len(item.Cluster) > widths.cluster {
 			widths.cluster = len(item.Cluster)
 		}
-		
+
 		readyStr := fmt.Sprintf("%d/%d", readyReplicas, replicas)
 		if len(readyStr) > widths.ready {
 			widths.ready = len(readyStr)
 		}
 	}
-	
+
 	// Add padding
 	widths.namespace += 2
 	widths.name += 2
@@ -325,7 +325,7 @@ func (a *TableAggregator) calculateDeploymentColumnWidths(items []ItemWithCluste
 	widths.ready += 2
 	widths.upToDate += 2
 	widths.available += 2
-	
+
 	return widths
 }
 
@@ -333,7 +333,7 @@ func (a *TableAggregator) calculateDeploymentColumnWidths(items []ItemWithCluste
 func (a *TableAggregator) formatServices(items []ItemWithCluster) error {
 	// Calculate column widths dynamically
 	widths := a.calculateServiceColumnWidths(items)
-	
+
 	// Header
 	fmt.Fprintf(a.writer, "%-*s %-*s %-*s %-*s %-*s %-*s %-*s %s\n",
 		widths.namespace, "NAMESPACE",
@@ -399,13 +399,13 @@ func (a *TableAggregator) calculateServiceColumnWidths(items []ItemWithCluster) 
 		externalIP: len("EXTERNAL-IP"),
 		ports:      len("PORT(S)"),
 	}
-	
+
 	for _, item := range items {
 		ns, _, _ := unstructured.NestedString(item.Item.Object, "metadata", "namespace")
 		name, _, _ := unstructured.NestedString(item.Item.Object, "metadata", "name")
 		svcType, _, _ := unstructured.NestedString(item.Item.Object, "spec", "type")
 		clusterIP, _, _ := unstructured.NestedString(item.Item.Object, "spec", "clusterIP")
-		
+
 		if len(ns) > widths.namespace {
 			widths.namespace = len(ns)
 		}
@@ -421,7 +421,7 @@ func (a *TableAggregator) calculateServiceColumnWidths(items []ItemWithCluster) 
 		if len(clusterIP) > widths.clusterIP {
 			widths.clusterIP = len(clusterIP)
 		}
-		
+
 		// Calculate ports width
 		ports := noneValue
 		if portsSlice, found, _ := unstructured.NestedSlice(item.Item.Object, "spec", "ports"); found && len(portsSlice) > 0 {
@@ -443,7 +443,7 @@ func (a *TableAggregator) calculateServiceColumnWidths(items []ItemWithCluster) 
 			widths.ports = len(ports)
 		}
 	}
-	
+
 	// Add padding
 	widths.namespace += 2
 	widths.name += 2
@@ -452,7 +452,7 @@ func (a *TableAggregator) calculateServiceColumnWidths(items []ItemWithCluster) 
 	widths.clusterIP += 2
 	widths.externalIP += 2
 	widths.ports += 2
-	
+
 	return widths
 }
 
@@ -460,7 +460,7 @@ func (a *TableAggregator) calculateServiceColumnWidths(items []ItemWithCluster) 
 func (a *TableAggregator) formatGeneric(items []ItemWithCluster) error {
 	// Calculate column widths dynamically
 	widths := a.calculateGenericColumnWidths(items)
-	
+
 	// Header
 	fmt.Fprintf(a.writer, "%-*s %-*s %-*s %-*s %s\n",
 		widths.namespace, "NAMESPACE",
@@ -500,16 +500,16 @@ func (a *TableAggregator) calculateGenericColumnWidths(items []ItemWithCluster) 
 		cluster:   len("CLUSTER"),
 		kind:      len("KIND"),
 	}
-	
+
 	for _, item := range items {
 		ns, _, _ := unstructured.NestedString(item.Item.Object, "metadata", "namespace")
 		name, _, _ := unstructured.NestedString(item.Item.Object, "metadata", "name")
 		kind := item.Item.GetKind()
-		
+
 		if ns == "" {
 			ns = "<none>"
 		}
-		
+
 		if len(ns) > widths.namespace {
 			widths.namespace = len(ns)
 		}
@@ -523,13 +523,13 @@ func (a *TableAggregator) calculateGenericColumnWidths(items []ItemWithCluster) 
 			widths.kind = len(kind)
 		}
 	}
-	
+
 	// Add padding
 	widths.namespace += 2
 	widths.name += 2
 	widths.cluster += 2
 	widths.kind += 2
-	
+
 	return widths
 }
 
@@ -539,16 +539,16 @@ func calculateAge(obj unstructured.Unstructured) string {
 	if !found || creationTime == "" {
 		return noneValue
 	}
-	
+
 	// Parse the timestamp
 	t, err := time.Parse(time.RFC3339, creationTime)
 	if err != nil {
 		return noneValue
 	}
-	
+
 	// Calculate duration
 	duration := time.Since(t)
-	
+
 	// Format like kubectl does
 	return formatDuration(duration)
 }

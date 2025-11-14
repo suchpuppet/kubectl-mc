@@ -41,7 +41,7 @@ func init() {
 	describeCmd.Flags().StringSliceVar(&clustersFlag, "clusters", []string{}, "comma-separated list of cluster names or patterns")
 	describeCmd.Flags().StringSliceVar(&excludeFlag, "exclude", []string{}, "comma-separated list of cluster names or patterns to exclude")
 	describeCmd.Flags().BoolVar(&allClusters, "all-clusters", false, "target all clusters (explicit confirmation)")
-	
+
 	// Add all-namespaces flag (kubectl standard -A)
 	describeCmd.Flags().BoolP("all-namespaces", "A", false, "query resources across all namespaces")
 }
@@ -109,7 +109,7 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	// Determine namespace to use
 	var namespace string
 	allNamespaces, _ := cmd.Flags().GetBool("all-namespaces")
-	
+
 	if allNamespaces {
 		// -A flag: query all namespaces
 		namespace = ""

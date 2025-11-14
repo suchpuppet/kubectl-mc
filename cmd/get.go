@@ -58,7 +58,7 @@ func init() {
 	getCmd.Flags().StringSliceVar(&clustersFlag, "clusters", []string{}, "comma-separated list of cluster names or patterns")
 	getCmd.Flags().StringSliceVar(&excludeFlag, "exclude", []string{}, "comma-separated list of cluster names or patterns to exclude")
 	getCmd.Flags().BoolVar(&allClusters, "all-clusters", false, "target all clusters (explicit confirmation)")
-	
+
 	// Add all-namespaces flag (kubectl standard -A)
 	getCmd.Flags().BoolP("all-namespaces", "A", false, "query resources across all namespaces")
 }
@@ -126,7 +126,7 @@ func runGet(cmd *cobra.Command, args []string) error {
 	// Determine namespace to use
 	var namespace string
 	allNamespaces, _ := cmd.Flags().GetBool("all-namespaces")
-	
+
 	if allNamespaces {
 		// -A flag: query all namespaces
 		namespace = ""
@@ -200,7 +200,7 @@ func matchesAny(str string, patterns []string) bool {
 		if str == pattern {
 			return true
 		}
-		
+
 		// Try glob pattern match (supports *, ?, [abc], etc.)
 		matched, err := filepath.Match(pattern, str)
 		if err == nil && matched {
