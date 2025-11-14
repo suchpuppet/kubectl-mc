@@ -71,16 +71,21 @@ This proof-of-concept is intended for:
 - ✅ Basic resource operations (`kubectl mc get pods/deployments/services`)
 - ✅ Result aggregation with CLUSTER column
 - ✅ Kubeconfig context mapping (manual setup via config file)
-- ✅ Error handling for partial cluster failures
+- ✅ Error handling for partial cluster failures (silent unless all fail)
 - ✅ Parallel execution across clusters with concurrency control
 - ✅ `kubectl mc setup` - Interactive cluster-to-context mapping
-- [ ] `kubectl mc describe <resource>` - Describe resources across clusters
+- ✅ `kubectl mc describe <resource>` - Describe resources across clusters with Events
+- ✅ Dynamic column width calculation for clean table output
+- ✅ Resource age calculation and display
+- ✅ All-namespaces support (`-A` / `--all-namespaces`)
+- ✅ Namespace default from kubeconfig context
+- ✅ Cluster filtering (`--clusters`, `--exclude`)
+- ✅ Wildcard cluster filtering (`--clusters=prod-*`, `--exclude=*-staging`)
+- ✅ Wildcard resource name filtering (`kubectl mc get pod nginx-*`)
 - [ ] `kubectl mc logs <pod>` - Get logs with cluster disambiguation
-- [ ] Basic cluster filtering (`--clusters`, `--exclude`)
 
 **Potential Phase 1 Additions:**
 - [ ] `kubectl mc edit <resource>` - Multiplexed edit across clusters (with safety checks)
-- [ ] Wildcard cluster filtering (`--clusters=prod-*`)
 
 ### Phase 2: Automatic Credential Configuration (Planned)
 
@@ -243,12 +248,21 @@ clusters:
   namespace: open-cluster-management
 ```
 
-### Basic Commands (Working Now)
+### Basic Commands
 
 ```bash
-# Get pods across all clusters
+# Get pods across all clusters (uses namespace from kubeconfig context)
+kubectl mc get pods
 kubectl mc get pods -n default
+
+# Get pods across all namespaces
+kubectl mc get pods -A
 kubectl mc get pods --all-namespaces
+
+# Use wildcards in resource names
+kubectl mc get pod nginx-*
+kubectl mc get deployment app-???-prod
+kubectl mc get service web-[0-9]*
 
 # Get deployments
 kubectl mc get deployments -n default
@@ -256,33 +270,88 @@ kubectl mc get deployments -n default
 # Get services
 kubectl mc get services -n kube-system
 
+# Filter by cluster patterns
+kubectl mc get pods --clusters=prod-*
+kubectl mc get deployments --exclude=*-staging
+kubectl mc get services --clusters=us-*,eu-* --exclude=*-dev
+
 # Specify hub context explicitly
 kubectl mc get pods --hub-context kind-ocm-hub -n test
+
+# Describe resources across clusters (includes Events!)
+kubectl mc describe pod nginx -n default
+kubectl mc describe deployment my-app
+kubectl mc describe service frontend -n production
+kubectl mc describe pod nginx-* -A
 ```
 
-**Example Output:**
+**Example Output (get):**
 ```
 $ kubectl mc get pods -n test
 Discovered 2 cluster(s)
 NAMESPACE   NAME                    CLUSTER      READY   STATUS    RESTARTS   AGE
-test        nginx-bc7b4f464-npn2t   ocm-spoke1   1/1     Running   0          ---
-test        nginx-bc7b4f464-24g52   ocm-spoke2   1/1     Running   0          ---
+test        nginx-bc7b4f464-npn2t   ocm-spoke1   1/1     Running   0          15h
+test        nginx-bc7b4f464-24g52   ocm-spoke2   1/1     Running   0          2h
+```
+
+**Example Output (describe):**
+```
+$ kubectl mc describe pod nginx-bc7b4f464-npn2t -n test
+Discovered 2 cluster(s)
+
+CLUSTER: ocm-spoke1
+--------------------------------------------------------------------------------
+Name:         nginx-bc7b4f464-npn2t
+Namespace:    test
+Labels:       app=nginx
+              pod-template-hash=bc7b4f464
+Annotations:  <none>
+Status:       Running
+IP:           10.244.0.24
+Containers:
+  nginx:
+    Image:          docker.io/bitnami/nginx:latest
+    Port:           8080/TCP, 8443/TCP
+    State:          Running
+      Started:      Thu, 14 Nov 2024 04:05:28 +0000
+    Ready:          True
+    Restart Count:  0
+    Environment:
+      NGINX_HTTP_PORT_NUMBER:   8080
+      NGINX_HTTPS_PORT_NUMBER:  8443
+    Mounts:
+      /opt/bitnami/nginx/conf from empty-dir (rw)
+      /tmp from empty-dir (rw)
+Volumes:
+  empty-dir:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+Conditions:
+  Type                             Status   LastTransitionTime          Reason                     Message
+  ----                             ------   ------------------          ------                     -------
+  PodReadyToStartContainers        True     2024-11-14T04:05:28Z                                   
+  Initialized                      True     2024-11-14T04:05:28Z                                   
+  Ready                            True     2024-11-14T04:05:35Z                                   
+  ContainersReady                  True     2024-11-14T04:05:35Z                                   
+  PodScheduled                     True     2024-11-14T04:05:28Z                                   
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  15h   default-scheduler  Successfully assigned test/nginx-bc7b4f464-npn2t to node
+  Normal  Pulled     15h   kubelet            Container image "docker.io/bitnami/nginx:latest" already present
+  Normal  Created    15h   kubelet            Created container nginx
+  Normal  Started    15h   kubelet            Started container nginx
 ```
 
 ### Planned Commands (Not Yet Implemented)
 
 ```bash
-# Describe and logs (Phase 1)
-kubectl mc describe pod my-pod
+# Logs (Phase 1)
 kubectl mc logs nginx-abc123
-
-# Cluster filtering (Phase 1)
-kubectl mc get pods --clusters=prod-*
-kubectl mc get pods --exclude=staging
 
 # Write operations (Phase 3)
 kubectl mc apply -f deployment.yaml --clusters=prod-*
 kubectl mc delete deployment nginx --all-clusters
+kubectl mc edit deployment nginx -n production
 ```
 
 **For detailed usage and examples, see [docs/architecture.md](docs/architecture.md)**

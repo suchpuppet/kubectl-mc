@@ -47,6 +47,11 @@ Or use the interactive setup command:
 ### Get pods across all clusters
 
 ```bash
+# Uses default namespace from kubeconfig
+./kubectl-mc get pods --hub-context kind-ocm-hub
+
+# Get pods across all namespaces (-A shorthand)
+./kubectl-mc get pods -A --hub-context kind-ocm-hub
 ./kubectl-mc get pods --all-namespaces --hub-context kind-ocm-hub
 ```
 
@@ -54,6 +59,29 @@ Or use the interactive setup command:
 
 ```bash
 ./kubectl-mc get pods -n test --hub-context kind-ocm-hub
+```
+
+### Use wildcards in resource names
+
+```bash
+# Match all nginx pods
+./kubectl-mc get pod nginx-* -n test
+
+# Match with patterns
+./kubectl-mc get deployment app-???-prod -n production
+```
+
+### Filter by cluster patterns
+
+```bash
+# Get pods from production clusters only
+./kubectl-mc get pods --clusters=prod-*
+
+# Exclude staging clusters
+./kubectl-mc get deployments --exclude=*-staging
+
+# Combine filters
+./kubectl-mc get services --clusters=us-*,eu-* --exclude=*-dev
 ```
 
 ### Get deployments
@@ -68,14 +96,24 @@ Or use the interactive setup command:
 ./kubectl-mc get services -n kube-system --hub-context kind-ocm-hub
 ```
 
+### Describe resources
+
+```bash
+# Describe a specific pod (includes Events!)
+./kubectl-mc describe pod nginx-abc123 -n test
+
+# Describe all pods matching a pattern
+./kubectl-mc describe pod nginx-* -n test
+```
+
 ## Example Output
 
 ```
 $ ./kubectl-mc get pods -n test --hub-context kind-ocm-hub
 Discovered 2 cluster(s)
 NAMESPACE       NAME                    CLUSTER         READY   STATUS    RESTARTS        AGE
-test            nginx-bc7b4f464-npn2t   ocm-spoke1      1/1     Running   0               ---
-test            nginx-bc7b4f464-24g52   ocm-spoke2      1/1     Running   0               ---
+test            nginx-bc7b4f464-npn2t   ocm-spoke1      1/1     Running   0               15h
+test            nginx-bc7b4f464-24g52   ocm-spoke2      1/1     Running   0               2h
 ```
 
 ## Testing

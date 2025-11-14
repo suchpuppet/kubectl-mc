@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/suchpuppet/kubectl-mc/pkg/aggregator"
@@ -15,55 +14,39 @@ import (
 )
 
 var (
-	// getCmd represents the get command
-	getCmd = &cobra.Command{
-		Use:   "get [resource] [name]",
-		Short: "Get resources across multiple clusters",
-		Long: `Get resources across all discovered clusters and aggregate the results.
+	// describeCmd represents the describe command
+	describeCmd = &cobra.Command{
+		Use:   "describe [resource] [name]",
+		Short: "Describe resources across multiple clusters",
+		Long: `Describe resources across all discovered clusters and display detailed information.
 
 Examples:
-  # List all pods across all clusters
-  kubectl mc get pods
+  # Describe a specific pod across all clusters
+  kubectl mc describe pod nginx
 
-  # List deployments in a specific namespace
-  kubectl mc get deployments -n default
+  # Describe all pods in a namespace
+  kubectl mc describe pods -n default
 
-  # Get a specific pod
-  kubectl mc get pod nginx
-  
-  # List pods across all namespaces
-  kubectl mc get pods -A
-  
-  # Use wildcards in resource names
-  kubectl mc get pod nginx-*
-  kubectl mc get deployment app-???-prod
-  
-  # Filter by cluster patterns (supports wildcards)
-  kubectl mc get pods --clusters=prod-*
-  kubectl mc get deployments --exclude=*-staging`,
+  # Describe a deployment
+  kubectl mc describe deployment my-app`,
 		Args: cobra.MinimumNArgs(1),
-		RunE: runGet,
+		RunE: runDescribe,
 	}
-
-	// Cluster filtering flags
-	clustersFlag []string
-	excludeFlag  []string
-	allClusters  bool
 )
 
 func init() {
-	rootCmd.AddCommand(getCmd)
+	rootCmd.AddCommand(describeCmd)
 
-	// Add cluster filtering flags
-	getCmd.Flags().StringSliceVar(&clustersFlag, "clusters", []string{}, "comma-separated list of cluster names or patterns")
-	getCmd.Flags().StringSliceVar(&excludeFlag, "exclude", []string{}, "comma-separated list of cluster names or patterns to exclude")
-	getCmd.Flags().BoolVar(&allClusters, "all-clusters", false, "target all clusters (explicit confirmation)")
+	// Add cluster filtering flags (reuse same flags as get)
+	describeCmd.Flags().StringSliceVar(&clustersFlag, "clusters", []string{}, "comma-separated list of cluster names or patterns")
+	describeCmd.Flags().StringSliceVar(&excludeFlag, "exclude", []string{}, "comma-separated list of cluster names or patterns to exclude")
+	describeCmd.Flags().BoolVar(&allClusters, "all-clusters", false, "target all clusters (explicit confirmation)")
 
 	// Add all-namespaces flag (kubectl standard -A)
-	getCmd.Flags().BoolP("all-namespaces", "A", false, "query resources across all namespaces")
+	describeCmd.Flags().BoolP("all-namespaces", "A", false, "query resources across all namespaces")
 }
 
-func runGet(cmd *cobra.Command, args []string) error {
+func runDescribe(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
 	// Get hub context
@@ -144,15 +127,15 @@ func runGet(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Execute get across all clusters
-	results, err := exec.Get(ctx, filteredClusters, resource, resourceName, namespace)
+	// Execute describe across all clusters
+	results, err := exec.Describe(ctx, filteredClusters, resource, resourceName, namespace)
 	if err != nil {
-		return fmt.Errorf("failed to execute get: %w", err)
+		return fmt.Errorf("failed to execute describe: %w", err)
 	}
 
 	// Aggregate and format results
-	agg := aggregator.NewTableAggregator(os.Stdout)
-	if err := agg.AggregateGetResults(results, resource); err != nil {
+	agg := aggregator.NewDescribeAggregator(os.Stdout)
+	if err := agg.AggregateDescribeResults(results, resource); err != nil {
 		return fmt.Errorf("failed to aggregate results: %w", err)
 	}
 
@@ -166,46 +149,4 @@ func runGet(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-// filterClusters applies cluster filtering based on --clusters and --exclude flags
-func filterClusters(clusters []discovery.ClusterInfo, include, exclude []string) []discovery.ClusterInfo {
-	// If no filtering specified, return all clusters
-	if len(include) == 0 && len(exclude) == 0 {
-		return clusters
-	}
-
-	filtered := make([]discovery.ClusterInfo, 0)
-
-	for _, cluster := range clusters {
-		// Skip if in exclude list
-		if matchesAny(cluster.Name, exclude) {
-			continue
-		}
-
-		// Include if no include list specified, or if matches include list
-		if len(include) == 0 || matchesAny(cluster.Name, include) {
-			filtered = append(filtered, cluster)
-		}
-	}
-
-	return filtered
-}
-
-// matchesAny checks if a string matches any of the patterns.
-// Supports glob patterns: * (any chars), ? (single char), [abc] (char class)
-func matchesAny(str string, patterns []string) bool {
-	for _, pattern := range patterns {
-		// Try exact match first
-		if str == pattern {
-			return true
-		}
-
-		// Try glob pattern match (supports *, ?, [abc], etc.)
-		matched, err := filepath.Match(pattern, str)
-		if err == nil && matched {
-			return true
-		}
-	}
-	return false
 }

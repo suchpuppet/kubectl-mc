@@ -3,6 +3,9 @@ package executor
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,6 +83,53 @@ func (e *Executor) Get(ctx context.Context, clusters []discovery.ClusterInfo, re
 	return results, nil
 }
 
+// Describe executes a describe command across multiple clusters
+func (e *Executor) Describe(ctx context.Context, clusters []discovery.ClusterInfo, resource, name, namespace string) (*AggregatedResults, error) {
+	results := NewAggregatedResults(clusters)
+
+	// Create a channel for results
+	resultChan := make(chan ClusterResult, len(clusters))
+
+	// Create semaphore for concurrency control
+	sem := make(chan struct{}, e.config.MaxConcurrency)
+
+	// WaitGroup to wait for all goroutines
+	var wg sync.WaitGroup
+
+	// Execute describe on each cluster in parallel
+	for _, cluster := range clusters {
+		wg.Add(1)
+		go func(c discovery.ClusterInfo) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Create context with timeout
+			ctx, cancel := context.WithTimeout(ctx, time.Duration(e.config.TimeoutSeconds)*time.Second)
+			defer cancel()
+
+			// Execute describe on this cluster
+			result := e.describeFromCluster(ctx, c, resource, name, namespace)
+			resultChan <- result
+		}(cluster)
+	}
+
+	// Wait for all goroutines to complete and close the channel
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results
+	for result := range resultChan {
+		results.AddResult(result)
+	}
+
+	return results, nil
+}
+
 // getFromCluster executes a get command on a single cluster
 func (e *Executor) getFromCluster(ctx context.Context, cluster discovery.ClusterInfo, resource, name, namespace string) ClusterResult {
 	result := ClusterResult{
@@ -130,8 +180,11 @@ func (e *Executor) getFromCluster(ctx context.Context, cluster discovery.Cluster
 		resourceInterface = dynamicClient.Resource(gvr)
 	}
 
-	if name != "" {
-		// Get specific resource
+	// Check if name contains wildcards
+	hasWildcard := name != "" && (strings.Contains(name, "*") || strings.Contains(name, "?") || strings.Contains(name, "["))
+
+	if name != "" && !hasWildcard {
+		// Get specific resource by exact name
 		item, err := resourceInterface.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			result.Error = fmt.Errorf("failed to get resource: %w", err)
@@ -139,13 +192,25 @@ func (e *Executor) getFromCluster(ctx context.Context, cluster discovery.Cluster
 		}
 		result.Items = append(result.Items, *item)
 	} else {
-		// List resources
+		// List resources (either no name specified, or name has wildcards)
 		list, err := resourceInterface.List(ctx, metav1.ListOptions{})
 		if err != nil {
 			result.Error = fmt.Errorf("failed to list resources: %w", err)
 			return result
 		}
-		result.Items = append(result.Items, list.Items...)
+
+		// If wildcard pattern specified, filter results
+		if hasWildcard {
+			for _, item := range list.Items {
+				matched, err := filepath.Match(name, item.GetName())
+				if err == nil && matched {
+					result.Items = append(result.Items, item)
+				}
+			}
+		} else {
+			// No filter, return all
+			result.Items = append(result.Items, list.Items...)
+		}
 	}
 
 	result.Success = true
@@ -153,9 +218,10 @@ func (e *Executor) getFromCluster(ctx context.Context, cluster discovery.Cluster
 }
 
 // resolveGVR resolves a resource name to its GroupVersionResource
-func (e *Executor) resolveGVR(discoveryClient k8sdiscovery.DiscoveryInterface, resource string) (schema.GroupVersionResource, error) {
+func (e *Executor) resolveGVR(_ k8sdiscovery.DiscoveryInterface, resource string) (schema.GroupVersionResource, error) {
 	// This is a simplified implementation.
 	// A production version would use kubectl's resource mapper for better resolution.
+	// discoveryClient parameter reserved for future enhancement.
 
 	// Common resource mappings (simplified)
 	commonResources := map[string]schema.GroupVersionResource{
@@ -179,4 +245,54 @@ func (e *Executor) resolveGVR(discoveryClient k8sdiscovery.DiscoveryInterface, r
 	}
 
 	return gvr, nil
+}
+
+// describeFromCluster executes a describe command on a single cluster using kubectl
+func (e *Executor) describeFromCluster(ctx context.Context, cluster discovery.ClusterInfo, resource, name, namespace string) ClusterResult {
+	result := ClusterResult{
+		ClusterName: cluster.Name,
+		Items:       []unstructured.Unstructured{},
+	}
+
+	// Get the kubeconfig context for this cluster
+	contextName, err := e.mappingManager.GetContext(cluster.Name)
+	if err != nil {
+		result.Error = fmt.Errorf("no kubeconfig context mapped for cluster %s", cluster.Name)
+		return result
+	}
+
+	// Use kubectl describe directly for perfect formatting
+	output, err := e.executeKubectlDescribe(ctx, contextName, resource, name, namespace)
+	if err != nil {
+		result.Error = err
+		return result
+	}
+
+	result.Output = output
+	result.Success = true
+	return result
+}
+
+// executeKubectlDescribe shells out to kubectl describe for perfect formatting
+func (e *Executor) executeKubectlDescribe(ctx context.Context, contextName, resource, name, namespace string) (string, error) {
+	args := []string{"describe", resource}
+
+	if name != "" {
+		args = append(args, name)
+	}
+
+	if namespace != "" {
+		args = append(args, "-n", namespace)
+	}
+
+	args = append(args, "--context", contextName)
+
+	// Execute kubectl
+	cmd := exec.CommandContext(ctx, "kubectl", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("kubectl describe failed: %w, output: %s", err, string(output))
+	}
+
+	return string(output), nil
 }
