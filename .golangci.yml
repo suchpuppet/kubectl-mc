@@ -1,0 +1,22 @@
+# golangci-lint configuration for kubectl-mc
+# NOTE: IDE may show schema warnings - these can be safely ignored.
+# This is a valid golangci-lint v1.x configuration file.
+# See: https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Reports suspicious constructs
+    - ineffassign   # Detects ineffectual assignments
+    - staticcheck   # Advanced static analysis
+    - unused        # Checks for unused code
+    - gofmt         # Checks code formatting
+    - misspell      # Finds commonly misspelled words
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
