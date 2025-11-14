@@ -74,7 +74,7 @@ This proof-of-concept is intended for:
 - ✅ Error handling for partial cluster failures
 - ✅ Parallel execution across clusters with concurrency control
 - ✅ `kubectl mc setup` - Interactive cluster-to-context mapping
-- [ ] `kubectl mc describe <resource>` - Describe resources across clusters
+- ✅ `kubectl mc describe <resource>` - Describe resources across clusters
 - [ ] `kubectl mc logs <pod>` - Get logs with cluster disambiguation
 - [ ] Basic cluster filtering (`--clusters`, `--exclude`)
 
@@ -258,9 +258,14 @@ kubectl mc get services -n kube-system
 
 # Specify hub context explicitly
 kubectl mc get pods --hub-context kind-ocm-hub -n test
+
+# Describe resources across clusters
+kubectl mc describe pod nginx -n default
+kubectl mc describe deployment my-app
+kubectl mc describe service frontend -n production
 ```
 
-**Example Output:**
+**Example Output (get):**
 ```
 $ kubectl mc get pods -n test
 Discovered 2 cluster(s)
@@ -269,11 +274,48 @@ test        nginx-bc7b4f464-npn2t   ocm-spoke1   1/1     Running   0          --
 test        nginx-bc7b4f464-24g52   ocm-spoke2   1/1     Running   0          ---
 ```
 
+**Example Output (describe):**
+```
+$ kubectl mc describe pod nginx -n default
+Discovered 2 cluster(s)
+
+CLUSTER: ocm-spoke1
+--------------------------------------------------------------------------------
+Name:         nginx
+Namespace:    default
+Labels:       app=nginx
+Annotations:  <none>
+
+Spec:
+  containers: [...]
+  ...
+
+Status:
+  phase: Running
+  ...
+
+================================================================================
+
+CLUSTER: ocm-spoke2
+--------------------------------------------------------------------------------
+Name:         nginx
+Namespace:    default
+Labels:       app=nginx
+Annotations:  <none>
+
+Spec:
+  containers: [...]
+  ...
+
+Status:
+  phase: Running
+  ...
+```
+
 ### Planned Commands (Not Yet Implemented)
 
 ```bash
-# Describe and logs (Phase 1)
-kubectl mc describe pod my-pod
+# Logs (Phase 1)
 kubectl mc logs nginx-abc123
 
 # Cluster filtering (Phase 1)

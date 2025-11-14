@@ -10,6 +10,7 @@ type ClusterResult struct {
 	ClusterName string
 	Success     bool
 	Items       []unstructured.Unstructured
+	Output      string // Raw text output (for describe, logs, etc.)
 	Error       error
 }
 
