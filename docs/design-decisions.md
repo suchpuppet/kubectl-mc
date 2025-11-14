@@ -99,6 +99,96 @@ kubectl mc setup --provider aws
 # Creates context mapping automatically
 ```
 
+## ClusterProfile Properties vs Secrets for Authentication
+
+### Why Properties, Not Secrets?
+
+For Phase 2 automatic credential configuration, we use ClusterProfile `status.properties` to store exec plugin metadata rather than Kubernetes Secrets. This design decision reflects the user credentials model.
+
+#### The Problem with Secrets
+
+The KEP-4322 (ClusterProfile API) suggests using Secrets to store kubeconfig data:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    x-k8s.io/cluster-profile: eks-prod
+data:
+  Config: <base64-kubeconfig-with-exec-plugin>
+```
+
+**This doesn't work for user-credential-based exec plugins** because:
+
+1. **Static credentials**: Secrets assume stored tokens/certs, not dynamic user credentials
+2. **Security**: Storing exec commands in secrets doesn't help - users need their own cloud CLI credentials
+3. **Shared state**: Secrets would need to be per-user, creating management complexity
+4. **Wrong abstraction**: The secret can't contain the user's `~/.aws/credentials` or gcloud auth
+
+#### The Properties Solution
+
+Store exec plugin **metadata** in ClusterProfile properties:
+
+```yaml
+status:
+  properties:
+  - name: auth.exec.command
+    value: "aws"
+  - name: auth.exec.args
+    value: "eks,get-token,--cluster-name,production,--region,us-east-1"
+  - name: auth.exec.apiVersion
+    value: "client.authentication.k8s.io/v1beta1"
+```
+
+**Benefits:**
+
+1. **User credentials**: Exec plugin runs locally using user's own cloud CLI credentials
+2. **No secrets**: Metadata is configuration, not sensitive data
+3. **Shared**: Same ClusterProfile works for all users (they use their own creds)
+4. **Simple**: OCM addon populates once, works for everyone
+5. **Cloud-native**: Leverages existing AWS CLI, gcloud, az CLI authentication
+
+#### When Secrets ARE Appropriate
+
+Secrets remain useful for:
+- Service account tokens
+- Static client certificates
+- OIDC tokens for service accounts
+- Hub cluster service principals
+
+But for **end-user operations with cloud CLI tools**, properties + local credentials is the right model.
+
+### No Hardcoded Logic Per Cloud
+
+The properties approach avoids hardcoding cloud-specific logic in kubectl-mc:
+
+**Bad (hardcoded)**:
+```go
+if clusterType == "eks" {
+    // Hardcode AWS logic
+    execConfig = buildAWSExecConfig(clusterName, region)
+} else if clusterType == "gke" {
+    // Hardcode GCP logic
+    execConfig = buildGKEExecConfig(project, zone, clusterName)
+}
+```
+
+**Good (generic)**:
+```go
+// Read exec config from properties generically
+execCommand := getProperty(props, "auth.exec.command")
+if execCommand != "" {
+    execConfig = &api.ExecConfig{
+        Command:    execCommand,
+        Args:       strings.Split(getProperty(props, "auth.exec.args"), ","),
+        APIVersion: getProperty(props, "auth.exec.apiVersion"),
+    }
+}
+```
+
+kubectl-mc remains cloud-agnostic. The OCM addon (or cluster manager) provides the cloud-specific metadata.
+
 ### Why Both?
 
 Real organizations use mixed environments:
