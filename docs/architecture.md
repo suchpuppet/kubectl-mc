@@ -242,9 +242,9 @@ func buildRestConfig(clusterProfile ClusterProfile) (*rest.Config, error) {
     execCommand := getProperty(clusterProfile.Status.Properties, "auth.exec.command")
     if execCommand != "" {
         config.ExecProvider = &api.ExecConfig{
-            APIVersion: getProperty(properties, "auth.exec.apiVersion"),
+            APIVersion: getProperty(clusterProfile.Status.Properties, "auth.exec.apiVersion"),
             Command:    execCommand,
-            Args:       strings.Split(getProperty(properties, "auth.exec.args"), ","),
+            Args:       strings.Split(getProperty(clusterProfile.Status.Properties, "auth.exec.args"), ","),
         }
     }
     
